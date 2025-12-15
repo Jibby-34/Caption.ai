@@ -80,18 +80,22 @@ class _CaptionAiRootState extends State<CaptionAiRoot> {
 
   @override
   Widget build(BuildContext context) {
+    final isCameraPage = _currentIndex == 1;
+
     final pages = [
       HomePage(onOpenCamera: () => _goTo(1)),
-      const CameraPage(),
+      const CameraPage(fullscreen: true),
       const HistoryPage(),
     ];
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: const PreferredSize(
-        preferredSize: Size.fromHeight(70),
-        child: CaptionAppBar(),
-      ),
+      appBar: isCameraPage
+          ? null
+          : const PreferredSize(
+              preferredSize: Size.fromHeight(70),
+              child: CaptionAppBar(),
+            ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -103,12 +107,19 @@ class _CaptionAiRootState extends State<CaptionAiRoot> {
             ],
           ),
         ),
-        child: SafeArea(
-          top: false,
-          child: IndexedStack(
-            index: _currentIndex,
-            children: pages,
-          ),
+        child: Builder(
+          builder: (context) {
+            final topInset = isCameraPage
+                ? 0.0
+                : kToolbarHeight + MediaQuery.of(context).padding.top;
+            return Padding(
+              padding: EdgeInsets.only(top: topInset),
+              child: IndexedStack(
+                index: _currentIndex,
+                children: pages,
+              ),
+            );
+          },
         ),
       ),
       bottomNavigationBar: Container(
@@ -166,7 +177,7 @@ class CaptionAppBar extends StatelessWidget {
         ),
       ),
       child: SafeArea(
-        bottom: false,
+        bottom: true,
         child: Row(
           children: [
             Container(
@@ -213,35 +224,6 @@ class CaptionAppBar extends StatelessWidget {
               ],
             ),
             const Spacer(),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(999),
-                color: Colors.white.withOpacity(0.04),
-                border: Border.all(color: Colors.white.withOpacity(0.06)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Color(0xFF4ADE80),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Prototype',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: Colors.white70,
-                          letterSpacing: 0.4,
-                        ),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
@@ -256,8 +238,8 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 90, 20, 16),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -404,7 +386,7 @@ class HomePage extends StatelessWidget {
               ),
             ],
           ),
-          const Spacer(),
+          const SizedBox(height: 32),
           ElevatedButton.icon(
             onPressed: onOpenCamera,
             style: ElevatedButton.styleFrom(
@@ -425,7 +407,7 @@ class HomePage extends StatelessWidget {
                   color: Colors.white54,
                 ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -465,7 +447,9 @@ class _FeatureChip extends StatelessWidget {
 }
 
 class CameraPage extends StatefulWidget {
-  const CameraPage({super.key});
+  const CameraPage({this.fullscreen = false, super.key});
+
+  final bool fullscreen;
 
   @override
   State<CameraPage> createState() => _CameraPageState();
@@ -569,8 +553,22 @@ class _CameraPageState extends State<CameraPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.fullscreen) {
+      return Column(
+        children: [
+          Expanded(
+            child: ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(32)),
+              child: _buildCameraPreview(context),
+            ),
+          ),
+        ],
+      );
+    }
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 90, 20, 20),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
       child: Column(
         children: [
           Row(
@@ -900,7 +898,7 @@ class HistoryPage extends StatelessWidget {
     final history = context.watch<CaptionHistory>().entries;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 90, 20, 10),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
