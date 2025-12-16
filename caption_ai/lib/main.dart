@@ -1515,6 +1515,7 @@ class HistoryPage extends StatefulWidget {
 
 class _HistoryPageState extends State<HistoryPage> {
   final ScrollController _scrollController = ScrollController();
+  String _filterOption = 'All';
 
   @override
   void initState() {
@@ -1545,23 +1546,67 @@ class _HistoryPageState extends State<HistoryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final history = context.watch<CaptionHistory>().entries;
+    final history = context.watch<CaptionHistory>();
+    final allEntries = history.entries;
+    final favoritedEntries = history.favoritedEntries;
+    final displayedEntries = _filterOption == 'Favorited' ? favoritedEntries : allEntries;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'History',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
+          Row(
+            children: [
+              Text(
+                'History',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const Spacer(),
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  color: Colors.white.withOpacity(0.04),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.06),
+                  ),
                 ),
+                child: DropdownButton<String>(
+                  value: _filterOption,
+                  underline: const SizedBox(),
+                  dropdownColor: const Color(0xFF0B1020),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.white,
+                      ),
+                  items: const [
+                    DropdownMenuItem<String>(
+                      value: 'All',
+                      child: Text('All'),
+                    ),
+                    DropdownMenuItem<String>(
+                      value: 'Favorited',
+                      child: Text('Favorited'),
+                    ),
+                  ],
+                  onChanged: (String? newValue) {
+                    if (newValue != null) {
+                      setState(() {
+                        _filterOption = newValue;
+                      });
+                    }
+                  },
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 6),
           Text(
-            history.isEmpty
-                ? 'Your recent captions will show up here.'
+            displayedEntries.isEmpty
+                ? _filterOption == 'Favorited'
+                    ? 'No favorited captions yet.'
+                    : 'Your recent captions will show up here.'
                 : 'Tap a card to expand and read the full caption.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Colors.white70,
@@ -1569,15 +1614,15 @@ class _HistoryPageState extends State<HistoryPage> {
           ),
           const SizedBox(height: 16),
           Expanded(
-            child: history.isEmpty
+            child: displayedEntries.isEmpty
                 ? const _EmptyHistoryState()
                 : ListView.separated(
                     controller: _scrollController,
                     padding: EdgeInsets.zero, // Start list flush to the top
-                    itemCount: history.length,
+                    itemCount: displayedEntries.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
-                      final entry = history[index];
+                      final entry = displayedEntries[index];
                       return _HistoryEntryTile(entry: entry);
                     },
                   ),
@@ -1636,7 +1681,7 @@ class _HistoryEntryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final history = context.read<CaptionHistory>();
+    final history = context.watch<CaptionHistory>();
     final created = entry.createdAt;
     final timeLabel =
         '${created.hour.toString().padLeft(2, '0')}:${created.minute.toString().padLeft(2, '0')}';
@@ -1646,7 +1691,8 @@ class _HistoryEntryTile extends StatelessWidget {
       onTap: () => history.toggleExpanded(entry.id),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
+        constraints: const BoxConstraints(minHeight: 80),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           color: Colors.white.withOpacity(0.02),
@@ -1656,107 +1702,111 @@ class _HistoryEntryTile extends StatelessWidget {
                 : Colors.white.withOpacity(0.06),
           ),
         ),
-        child: Column(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                if (entry.imagePath != null)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: Image.file(
-                      File(entry.imagePath!),
-                      width: 52,
-                      height: 52,
-                      fit: BoxFit.cover,
-                    ),
-                  )
-                else
-                  Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      color: Colors.white.withOpacity(0.04),
-                    ),
-                    child: const Icon(
-                      Icons.text_fields_rounded,
-                      color: Colors.white70,
-                    ),
+            if (entry.imagePath != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Image.file(
+                  File(entry.imagePath!),
+                  width: 52,
+                  height: 52,
+                  fit: BoxFit.cover,
+                ),
+              )
+            else
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  color: Colors.white.withOpacity(0.04),
+                ),
+                child: const Icon(
+                  Icons.text_fields_rounded,
+                  color: Colors.white70,
+                ),
+              ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    entry.caption,
+                    maxLines: entry.isExpanded ? 4 : 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
-                const SizedBox(width: 12),
-                Expanded(
-        child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  const SizedBox(height: 4),
+                  Row(
                     children: [
-                      Text(
-                        entry.caption,
-                        maxLines: entry.isExpanded ? 4 : 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium,
+                      Icon(
+                        Icons.access_time_rounded,
+                        size: 14,
+                        color: Colors.white54,
                       ),
-                      const SizedBox(height: 4),
-                      Row(
-          children: [
-                          Icon(
-                            Icons.access_time_rounded,
-                            size: 14,
-                            color: Colors.white54,
-                          ),
-                          const SizedBox(width: 4),
-            Text(
-                            timeLabel,
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelSmall
-                                ?.copyWith(
-                                  color: Colors.white60,
-                                ),
-                          ),
-                        ],
+                      const SizedBox(width: 4),
+                      Text(
+                        timeLabel,
+                        style: Theme.of(context)
+                            .textTheme
+                            .labelSmall
+                            ?.copyWith(
+                              color: Colors.white60,
+                            ),
                       ),
                     ],
                   ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () {
+                      // Share button - no implementation
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: Icon(
+                        Icons.share_outlined,
+                        size: 20,
+                        color: Colors.white.withOpacity(0.7),
+                      ),
+                    ),
+                  ),
                 ),
-                const SizedBox(width: 8),
-                Icon(
-                  entry.isExpanded
-                      ? Icons.keyboard_arrow_up_rounded
-                      : Icons.keyboard_arrow_down_rounded,
-                  color: Colors.white60,
+                const SizedBox(height: 4),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () {
+                      history.toggleFavorite(entry.id);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: Icon(
+                        entry.isFavorited
+                            ? Icons.favorite
+                            : Icons.favorite_border,
+                        size: 20,
+                        color: entry.isFavorited
+                            ? Colors.red
+                            : Colors.white.withOpacity(0.7),
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
-            if (entry.isExpanded) ...[
-              const SizedBox(height: 10),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  color: Colors.white.withOpacity(0.02),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.tips_and_updates_rounded,
-                      size: 16,
-                      color: Colors.white70,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'Placeholder caption only – plug in your own model or API here.',
-                        style:
-                            Theme.of(context).textTheme.labelSmall?.copyWith(
-                                  color: Colors.white70,
-                                ),
-                      ),
-            ),
-          ],
-        ),
-      ),
-            ],
           ],
         ),
       ),
@@ -1771,6 +1821,7 @@ class CaptionEntry {
     required this.createdAt,
     this.imagePath,
     this.isExpanded = false,
+    this.isFavorited = false,
   });
 
   final String id;
@@ -1778,6 +1829,7 @@ class CaptionEntry {
   final DateTime createdAt;
   final String? imagePath;
   bool isExpanded;
+  bool isFavorited;
 
   Map<String, dynamic> toJson() {
     return {
@@ -1786,6 +1838,7 @@ class CaptionEntry {
       'createdAt': createdAt.toIso8601String(),
       'imagePath': imagePath,
       'isExpanded': isExpanded,
+      'isFavorited': isFavorited,
     };
   }
 
@@ -1796,6 +1849,7 @@ class CaptionEntry {
       createdAt: DateTime.parse(json['createdAt'] as String),
       imagePath: json['imagePath'] as String?,
       isExpanded: json['isExpanded'] as bool? ?? false,
+      isFavorited: json['isFavorited'] as bool? ?? false,
     );
   }
 }
@@ -1857,6 +1911,18 @@ class CaptionHistory extends ChangeNotifier {
     _entries[index].isExpanded = !_entries[index].isExpanded;
     notifyListeners();
     _saveHistory();
+  }
+
+  void toggleFavorite(String id) {
+    final index = _entries.indexWhere((e) => e.id == id);
+    if (index == -1) return;
+    _entries[index].isFavorited = !_entries[index].isFavorited;
+    notifyListeners();
+    _saveHistory();
+  }
+
+  List<CaptionEntry> get favoritedEntries {
+    return _entries.where((e) => e.isFavorited).toList();
   }
 }
 
