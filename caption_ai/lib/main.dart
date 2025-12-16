@@ -1,18 +1,23 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final history = CaptionHistory();
+  await history.loadHistory();
   runApp(
     ChangeNotifierProvider(
-      create: (_) => CaptionHistory(),
+      create: (_) => history,
       child: const CaptionAiApp(),
     ),
   );
@@ -73,11 +78,18 @@ class CaptionAiRoot extends StatefulWidget {
 
 class _CaptionAiRootState extends State<CaptionAiRoot> {
   int _currentIndex = 0;
+  VoidCallback? _scrollHistoryToTop;
 
   void _goTo(int index) {
     setState(() {
       _currentIndex = index;
     });
+    // Scroll to top when navigating to history page
+    if (index == 2 && _scrollHistoryToTop != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollHistoryToTop?.call();
+      });
+    }
   }
 
   @override
@@ -90,7 +102,11 @@ class _CaptionAiRootState extends State<CaptionAiRoot> {
         onOpenHistory: () => _goTo(2),
       ),
       const CameraPage(fullscreen: true),
-      const HistoryPage(),
+      HistoryPage(
+        onScrollToTopCallback: (callback) {
+          _scrollHistoryToTop = callback;
+        },
+      ),
     ];
 
     return Scaffold(
@@ -98,7 +114,7 @@ class _CaptionAiRootState extends State<CaptionAiRoot> {
       appBar: isCameraPage
           ? null
           : const PreferredSize(
-              preferredSize: Size.fromHeight(80),
+              preferredSize: Size.fromHeight(48), // Even tighter, almost exactly logo height
               child: CaptionAppBar(),
             ),
       body: Container(
@@ -174,7 +190,7 @@ class CaptionAppBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
+      padding: const EdgeInsets.symmetric(vertical: 0, horizontal: 20), // FLUSH, no deadspace
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -425,7 +441,7 @@ class HomePage extends StatelessWidget {
                 onPressed: onOpenHistory,
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(50),
+                  minimumSize: const Size.fromHeight(54),
                   side: BorderSide(
                     color: Colors.white.withOpacity(0.25),
                   ),
@@ -524,44 +540,72 @@ class CameraPage extends StatefulWidget {
   State<CameraPage> createState() => _CameraPageState();
 }
 
-class _CameraPageState extends State<CameraPage> {
+class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
   CameraController? _cameraController;
-  Future<void>? _initialization;
-  XFile? _lastImage;
+  List<CameraDescription>? _cameras;
+  bool _isCameraInitialized = false;
+  bool _isCameraPermissionGranted = false;
+  Uint8List? _pickedImageBytes;
   String? _lastCaption;
+  String? _lastImagePath;
   bool _isBusy = false;
 
   @override
   void initState() {
     super.initState();
-    _setupCamera();
-  }
-
-  Future<void> _setupCamera() async {
-    try {
-      final cameras = await availableCameras();
-      if (cameras.isEmpty) {
-        return;
-      }
-      final controller = CameraController(
-        cameras.first,
-        ResolutionPreset.medium,
-        enableAudio: false,
-      );
-      setState(() {
-        _cameraController = controller;
-        _initialization = controller.initialize();
-      });
-      await _initialization;
-    } catch (_) {
-      // If camera setup fails we simply won’t show a preview.
-    }
+    WidgetsBinding.instance.addObserver(this);
+    _initializeCamera();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _cameraController?.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      return;
+    }
+
+    if (state == AppLifecycleState.inactive) {
+      _cameraController?.dispose();
+    } else if (state == AppLifecycleState.resumed) {
+      _initializeCamera();
+    }
+  }
+
+  Future<void> _initializeCamera() async {
+    if (kIsWeb) return; // Camera preview not supported on web
+    
+    try {
+      _cameras = await availableCameras();
+      if (_cameras == null || _cameras!.isEmpty) return;
+
+      _cameraController = CameraController(
+        _cameras![0],
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+
+      await _cameraController!.initialize();
+      
+      if (mounted) {
+        setState(() {
+          _isCameraInitialized = true;
+          _isCameraPermissionGranted = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error initializing camera: $e');
+      if (mounted) {
+        setState(() {
+          _isCameraPermissionGranted = false;
+        });
+      }
+    }
   }
 
   Future<void> _captureWithCamera() async {
@@ -569,49 +613,38 @@ class _CameraPageState extends State<CameraPage> {
       return;
     }
     if (_isBusy) return;
-    setState(() {
-      _isBusy = true;
-    });
     try {
       final image = await _cameraController!.takePicture();
-      await _onImageSelected(image);
-    } catch (_) {
-      setState(() {
-        _isBusy = false;
-      });
+      final bytes = await image.readAsBytes();
+      await _onImageSelected(bytes, image.path);
+    } catch (e) {
+      debugPrint('Error taking picture: $e');
     }
   }
 
   Future<void> _pickFromGallery() async {
     if (_isBusy) return;
-    setState(() {
-      _isBusy = true;
-    });
     try {
       final picker = ImagePicker();
       final image = await picker.pickImage(source: ImageSource.gallery);
       if (image != null) {
-        await _onImageSelected(image);
-      } else {
-        setState(() {
-          _isBusy = false;
-        });
+        final bytes = await File(image.path).readAsBytes();
+        await _onImageSelected(bytes, image.path);
       }
-    } catch (_) {
-      setState(() {
-        _isBusy = false;
-      });
+    } catch (e) {
+      debugPrint('Error picking image: $e');
     }
   }
 
-  Future<void> _onImageSelected(XFile image) async {
+  Future<void> _onImageSelected(Uint8List imageBytes, String imagePath) async {
     setState(() {
-      _lastImage = image;
+      _pickedImageBytes = imageBytes;
+      _lastImagePath = imagePath;
       _lastCaption = null;
+      _isBusy = true;
     });
 
     try {
-      final imageBytes = await File(image.path).readAsBytes();
 
       final url = Uri.parse(
         'https://caption-ai-proxy.image-proxy-gateway.workers.dev/',
@@ -641,7 +674,7 @@ class _CameraPageState extends State<CameraPage> {
 
       context.read<CaptionHistory>().addEntry(
             caption: caption,
-            imagePath: image.path,
+            imagePath: imagePath,
           );
 
       setState(() {
@@ -653,7 +686,7 @@ class _CameraPageState extends State<CameraPage> {
 
       context.read<CaptionHistory>().addEntry(
             caption: fallbackCaption,
-            imagePath: image.path,
+            imagePath: imagePath,
           );
 
       setState(() {
@@ -666,6 +699,14 @@ class _CameraPageState extends State<CameraPage> {
         });
       }
     }
+  }
+
+  void _resetImage() {
+    setState(() {
+      _pickedImageBytes = null;
+      _lastImagePath = null;
+      _lastCaption = null;
+    });
   }
 
   String _extractCaptionFromGeminiResponse(String body) {
@@ -716,18 +757,30 @@ class _CameraPageState extends State<CameraPage> {
   @override
   Widget build(BuildContext context) {
     if (widget.fullscreen) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 24),
-        child: Column(
-          children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(32)),
-                child: _buildCameraPreview(context),
+      return Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF0F172A),
+              Color(0xFF020617),
+            ],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.only(top: 24),
+          child: Column(
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(32)),
+                  child: _buildCameraPreview(context),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
@@ -788,9 +841,9 @@ class _CameraPageState extends State<CameraPage> {
                   ),
                 ),
                 const SizedBox(height: 18),
-                if (_lastCaption != null && _lastImage != null)
+                if (_lastCaption != null && _lastImagePath != null)
                   _CaptionCard(
-                    imagePath: _lastImage!.path,
+                    imagePath: _lastImagePath!,
                     caption: _lastCaption!,
                   )
                 else
@@ -804,36 +857,272 @@ class _CameraPageState extends State<CameraPage> {
   }
 
   Widget _buildCameraPreview(BuildContext context) {
-    if (_cameraController == null) {
-      return _CameraUnavailable(
-        onPickFromGallery: _isBusy ? null : _pickFromGallery,
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final bg = isDark ? theme.colorScheme.surfaceVariant : Colors.black;
+
+    // If we have a captured image, show it instead of the camera preview
+    Widget? backgroundWidget;
+    if (_pickedImageBytes != null) {
+      final previewSize = _cameraController?.value.previewSize;
+      if (_cameraController != null && _cameraController!.value.isInitialized && previewSize != null) {
+        // The plugin reports landscape sizes, swap to portrait dims.
+        final double previewWidth = previewSize.height;
+        final double previewHeight = previewSize.width;
+
+        backgroundWidget = ClipRRect(
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+          ),
+          child: Container(
+            color: Colors.black,
+            child: FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: previewWidth,
+                height: previewHeight,
+                child: Image.memory(
+                  _pickedImageBytes!,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+          ),
+        );
+      } else {
+        // Fallback: contain the image if we can't determine preview size.
+        backgroundWidget = ClipRRect(
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+          ),
+          child: Container(
+            color: bg,
+            child: Image.memory(
+              _pickedImageBytes!,
+              fit: BoxFit.contain,
+              width: double.infinity,
+              height: double.infinity,
+            ),
+          ),
+        );
+      }
+    }
+
+    // Web fallback
+    if (kIsWeb) {
+      return Container(
+        color: bg,
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? const Color(0xFF1E293B).withOpacity(0.8)
+                  : Colors.white.withOpacity(0.9),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withOpacity(0.1)
+                    : Colors.black.withOpacity(0.05),
+                width: 1,
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.camera_alt_outlined,
+                    size: 48,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Camera preview not available on web',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        theme.colorScheme.primary,
+                        theme.colorScheme.tertiary,
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: ElevatedButton.icon(
+                    onPressed: _isBusy ? null : _pickFromGallery,
+                    icon: const Icon(Icons.upload_file_rounded, color: Colors.white),
+                    label: const Text(
+                      'Upload Image',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
 
-    return FutureBuilder<void>(
-      future: _initialization,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator.adaptive(),
-          );
-        }
-        if (!_cameraController!.value.isInitialized) {
-          return _CameraUnavailable(
-            onPickFromGallery: _isBusy ? null : _pickFromGallery,
-          );
-        }
+    // Permission/state handling
+    if (!_isCameraPermissionGranted) {
+      return Container(
+        color: bg,
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? const Color(0xFF1E293B).withOpacity(0.8)
+                  : Colors.white.withOpacity(0.9),
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.camera_alt_outlined,
+                  size: 48,
+                  color: theme.colorScheme.error,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Camera permission required',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
-        return Stack(
-          children: [
-            Positioned.fill(
+    if (!_isCameraInitialized || _cameraController == null) {
+      return Container(
+        color: bg,
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? const Color(0xFF1E293B).withOpacity(0.8)
+                  : Colors.white.withOpacity(0.9),
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(
+                  color: theme.colorScheme.primary,
+                  strokeWidth: 3,
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Initializing camera...',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // If we have an image, use it as background; otherwise use camera preview
+    if (backgroundWidget == null) {
+      // Full-screen, cover-scaling camera preview that fills available space
+      final previewSize = _cameraController!.value.previewSize;
+
+      if (previewSize == null) {
+        return Container(color: bg);
+      }
+
+      // The plugin reports landscape size; swap to match portrait if needed
+      final double cameraPreviewWidth = previewSize.height;
+      final double cameraPreviewHeight = previewSize.width;
+
+      backgroundWidget = ClipRRect(
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(16),
+          topRight: Radius.circular(16),
+        ),
+        child: Container(
+          color: Colors.black,
+          child: FittedBox(
+            fit: BoxFit.cover,
+            child: SizedBox(
+              width: cameraPreviewWidth,
+              height: cameraPreviewHeight,
               child: CameraPreview(_cameraController!),
             ),
-            if (_lastImage != null)
+          ),
+        ),
+      );
+    }
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: backgroundWidget!,
+        ),
+            if (_isBusy)
               Positioned.fill(
-                child: Image.file(
-                  File(_lastImage!.path),
-                  fit: BoxFit.cover,
+                child: Container(
+                  color: Colors.black.withOpacity(0.6),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator.adaptive(
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Color(0xFF9F7BFF),
+                          ),
+                          strokeWidth: 3,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Processing...',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             Positioned(
@@ -898,81 +1187,163 @@ class _CameraPageState extends State<CameraPage> {
                 alignment: Alignment.bottomCenter,
                 child: Padding(
                   padding:
-                      const EdgeInsets.only(left: 16, right: 16, bottom: 20),
+                      const EdgeInsets.only(left: 20, right: 20, bottom: 40),
                   child: Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      color: Colors.black.withOpacity(0.75),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.16),
+                      borderRadius: BorderRadius.circular(22),
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Color(0xFF0B1120),
+                          Color(0xFF020617),
+                        ],
                       ),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.18),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.45),
+                          blurRadius: 24,
+                          offset: const Offset(0, 14),
+                        ),
+                      ],
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Container(
-                              width: 28,
-                              height: 28,
+                              width: 30,
+                              height: 30,
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(999),
+                                borderRadius: BorderRadius.circular(8),
                                 gradient: const LinearGradient(
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
                                   colors: [
-                                    Color(0xFF7C3AED),
-                                    Color(0xFF22D3EE),
+                                    Color(0xFF38BDF8),
+                                    Color(0xFF9F7BFF),
                                   ],
                                 ),
                               ),
                               child: const Icon(
-                                Icons.auto_awesome_rounded,
+                                Icons.camera_alt_rounded,
                                 size: 18,
                                 color: Colors.white,
                               ),
                             ),
-                            const Spacer(),
-                            InkWell(
-                              borderRadius: BorderRadius.circular(999),
-                              onTap: () {
-                                setState(() {
-                                  _lastCaption = null;
-                                  _lastImage = null;
-                                });
-                              },
+                            const SizedBox(width: 12),
+                            Expanded(
                               child: Padding(
-                                padding: const EdgeInsets.all(4),
-                                child: Icon(
-                                  Icons.close_rounded,
-                                  size: 20,
-                                  color: Colors.white.withOpacity(0.9),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                  vertical: 4,
+                                ),
+                                child: Text(
+                                  _lastCaption ?? '',
+                                  style: GoogleFonts.quicksand(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: 17,
+                                    height: 1.5,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.red.withOpacity(0.5),
+                                    blurRadius: 8,
+                                    spreadRadius: 2,
+                                  ),
+                                ],
+                              ),
+                              child: Material(
+                                color: Colors.white.withOpacity(0.06),
+                                borderRadius: BorderRadius.circular(999),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(999),
+                                  onTap: _resetImage,
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(6),
+                                    child: Icon(
+                                      Icons.close_rounded,
+                                      size: 18,
+                                      color: Colors.white.withOpacity(0.9),
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _lastCaption ?? '',
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style:
-                              Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: Colors.white,
-                                  ),
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            gradient: const LinearGradient(
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                              colors: [
+                                Color(0xFF9F7BFF),
+                                Color(0xFF38BDF8),
+                              ],
+                            ),
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () {
+                                // Share button does nothing
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 10,
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.share_rounded,
+                                      size: 18,
+                                      color: Colors.white,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Share',
+                                      style: GoogleFonts.poppins(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ),
               ),
-          ],
-        );
-      },
+      ],
     );
   }
 }
@@ -1133,15 +1504,51 @@ class _CaptionCard extends StatelessWidget {
   }
 }
 
-class HistoryPage extends StatelessWidget {
-  const HistoryPage({super.key});
+class HistoryPage extends StatefulWidget {
+  const HistoryPage({this.onScrollToTopCallback, super.key});
+
+  final void Function(VoidCallback)? onScrollToTopCallback;
+
+  @override
+  State<HistoryPage> createState() => _HistoryPageState();
+}
+
+class _HistoryPageState extends State<HistoryPage> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    // Register scroll callback with parent
+    widget.onScrollToTopCallback?.call(scrollToTop);
+    // Scroll to top when the page is first built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      scrollToTop();
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void scrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final history = context.watch<CaptionHistory>().entries;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1165,6 +1572,8 @@ class HistoryPage extends StatelessWidget {
             child: history.isEmpty
                 ? const _EmptyHistoryState()
                 : ListView.separated(
+                    controller: _scrollController,
+                    padding: EdgeInsets.zero, // Start list flush to the top
                     itemCount: history.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
@@ -1369,12 +1778,62 @@ class CaptionEntry {
   final DateTime createdAt;
   final String? imagePath;
   bool isExpanded;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'caption': caption,
+      'createdAt': createdAt.toIso8601String(),
+      'imagePath': imagePath,
+      'isExpanded': isExpanded,
+    };
+  }
+
+  factory CaptionEntry.fromJson(Map<String, dynamic> json) {
+    return CaptionEntry(
+      id: json['id'] as String,
+      caption: json['caption'] as String,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      imagePath: json['imagePath'] as String?,
+      isExpanded: json['isExpanded'] as bool? ?? false,
+    );
+  }
 }
 
 class CaptionHistory extends ChangeNotifier {
   final List<CaptionEntry> _entries = [];
+  static const String _historyKey = 'caption_history';
 
   List<CaptionEntry> get entries => List.unmodifiable(_entries);
+
+  Future<void> loadHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final historyJson = prefs.getString(_historyKey);
+      if (historyJson != null) {
+        final List<dynamic> decoded = jsonDecode(historyJson);
+        _entries.clear();
+        _entries.addAll(
+          decoded.map((e) => CaptionEntry.fromJson(e as Map<String, dynamic>)),
+        );
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error loading history: $e');
+    }
+  }
+
+  Future<void> _saveHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final historyJson = jsonEncode(
+        _entries.map((e) => e.toJson()).toList(),
+      );
+      await prefs.setString(_historyKey, historyJson);
+    } catch (e) {
+      debugPrint('Error saving history: $e');
+    }
+  }
 
   void addEntry({
     required String caption,
@@ -1389,6 +1848,7 @@ class CaptionHistory extends ChangeNotifier {
     );
     _entries.insert(0, entry);
     notifyListeners();
+    _saveHistory();
   }
 
   void toggleExpanded(String id) {
@@ -1396,6 +1856,7 @@ class CaptionHistory extends ChangeNotifier {
     if (index == -1) return;
     _entries[index].isExpanded = !_entries[index].isExpanded;
     notifyListeners();
+    _saveHistory();
   }
 }
 
