@@ -545,6 +545,7 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
   List<CameraDescription>? _cameras;
   bool _isCameraInitialized = false;
   bool _isCameraPermissionGranted = false;
+  String _selectedMood = 'Funny';
   Uint8List? _pickedImageBytes;
   String? _lastCaption;
   String? _lastImagePath;
@@ -861,6 +862,14 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
     final isDark = theme.brightness == Brightness.dark;
     final bg = isDark ? theme.colorScheme.surfaceVariant : Colors.black;
 
+    final moodOptions = <String, Color>{
+      'Funny': Colors.amber,
+      'Sarcastic': Colors.purple,
+      'Savage': const Color(0xFFDC143C), // Crimson
+      'Chaotic': const Color(0xFFFF69B4), // Hot Pink
+      'Wholesome': const Color(0xFFFFF9C4), // Soft Yellow
+    };
+
     // If we have a captured image, show it instead of the camera preview
     Widget? backgroundWidget;
     if (_pickedImageBytes != null) {
@@ -1097,6 +1106,20 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
         Positioned.fill(
           child: backgroundWidget!,
         ),
+            Positioned(
+              top: 24,
+              left: 14,
+              child: _MoodDropdown(
+                value: _selectedMood,
+                options: moodOptions,
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() {
+                    _selectedMood = value;
+                  });
+                },
+              ),
+            ),
             if (_isBusy)
               Positioned.fill(
                 child: Container(
@@ -1348,6 +1371,70 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
   }
 }
 
+class _MoodDropdown extends StatelessWidget {
+  const _MoodDropdown({
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
+
+  final String value;
+  final Map<String, Color> options;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      height: 38,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        color: Colors.black.withOpacity(0.45),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.16),
+        ),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          isDense: true,
+          dropdownColor: const Color(0xFF0B1020),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Colors.white,
+              ),
+          icon: const Icon(
+            Icons.keyboard_arrow_down_rounded,
+            size: 18,
+            color: Colors.white70,
+          ),
+          items: options.entries
+              .map(
+                (entry) => DropdownMenuItem<String>(
+                  value: entry.key,
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: entry.value,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(entry.key),
+                    ],
+                  ),
+                ),
+              )
+              .toList(),
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+}
+
 class _CameraUnavailable extends StatelessWidget {
   const _CameraUnavailable({this.onPickFromGallery});
 
@@ -1566,37 +1653,47 @@ class _HistoryPageState extends State<HistoryPage> {
               ),
               const Spacer(),
               Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                margin: const EdgeInsets.only(right: 2),
+                height: 36,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(999),
                   color: Colors.white.withOpacity(0.04),
                   border: Border.all(
                     color: Colors.white.withOpacity(0.06),
                   ),
                 ),
-                child: DropdownButton<String>(
-                  value: _filterOption,
-                  underline: const SizedBox(),
-                  dropdownColor: const Color(0xFF0B1020),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.white,
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _filterOption,
+                    isDense: true,
+                    dropdownColor: const Color(0xFF0B1020),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.white,
+                        ),
+                    icon: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 18,
+                      color: Colors.white70,
+                    ),
+                    items: const [
+                      DropdownMenuItem<String>(
+                        value: 'All',
+                        child: Text('All'),
                       ),
-                  items: const [
-                    DropdownMenuItem<String>(
-                      value: 'All',
-                      child: Text('All'),
-                    ),
-                    DropdownMenuItem<String>(
-                      value: 'Favorited',
-                      child: Text('Favorited'),
-                    ),
-                  ],
-                  onChanged: (String? newValue) {
-                    if (newValue != null) {
-                      setState(() {
-                        _filterOption = newValue;
-                      });
-                    }
-                  },
+                      DropdownMenuItem<String>(
+                        value: 'Favorited',
+                        child: Text('Favorited'),
+                      ),
+                    ],
+                    onChanged: (String? newValue) {
+                      if (newValue != null) {
+                        setState(() {
+                          _filterOption = newValue;
+                        });
+                      }
+                    },
+                  ),
                 ),
               ),
             ],
@@ -1702,111 +1799,183 @@ class _HistoryEntryTile extends StatelessWidget {
                 : Colors.white.withOpacity(0.06),
           ),
         ),
-        child: Row(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (entry.imagePath != null)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: Image.file(
-                  File(entry.imagePath!),
-                  width: 52,
-                  height: 52,
-                  fit: BoxFit.cover,
-                ),
-              )
-            else
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  color: Colors.white.withOpacity(0.04),
-                ),
-                child: const Icon(
-                  Icons.text_fields_rounded,
-                  color: Colors.white70,
-                ),
-              ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    entry.caption,
-                    maxLines: entry.isExpanded ? 4 : 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (entry.imagePath != null)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Image.file(
+                      File(entry.imagePath!),
+                      width: 52,
+                      height: 52,
+                      fit: BoxFit.cover,
+                    ),
+                  )
+                else
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      color: Colors.white.withOpacity(0.04),
+                    ),
+                    child: const Icon(
+                      Icons.text_fields_rounded,
+                      color: Colors.white70,
+                    ),
                   ),
-                  const SizedBox(height: 4),
-                  Row(
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(
-                        Icons.access_time_rounded,
-                        size: 14,
-                        color: Colors.white54,
-                      ),
-                      const SizedBox(width: 4),
                       Text(
-                        timeLabel,
-                        style: Theme.of(context)
-                            .textTheme
-                            .labelSmall
-                            ?.copyWith(
-                              color: Colors.white60,
-                            ),
+                        entry.caption,
+                        maxLines: entry.isExpanded ? null : 2,
+                        overflow: entry.isExpanded
+                            ? TextOverflow.visible
+                            : TextOverflow.ellipsis,
+                        style: (entry.isExpanded
+                                ? Theme.of(context).textTheme.titleMedium
+                                : Theme.of(context).textTheme.bodyMedium)
+                            ?.copyWith(height: 1.4),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.access_time_rounded,
+                            size: 14,
+                            color: Colors.white54,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            timeLabel,
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                  color: Colors.white60,
+                                ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: () {
-                      // Share button - no implementation
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.all(6),
-                      child: Icon(
-                        Icons.share_outlined,
-                        size: 20,
-                        color: Colors.white.withOpacity(0.7),
-                      ),
-                    ),
-                  ),
                 ),
-                const SizedBox(height: 4),
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: () {
-                      history.toggleFavorite(entry.id);
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.all(6),
-                      child: Icon(
-                        entry.isFavorited
-                            ? Icons.favorite
-                            : Icons.favorite_border,
-                        size: 20,
-                        color: entry.isFavorited
-                            ? Colors.red
-                            : Colors.white.withOpacity(0.7),
+                const SizedBox(width: 8),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () {
+                          history.deleteEntry(entry.id);
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: Icon(
+                            Icons.delete_outline_rounded,
+                            size: 20,
+                            color: Colors.white.withOpacity(0.7),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () {
+                          history.toggleFavorite(entry.id);
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: Icon(
+                            entry.isFavorited
+                                ? Icons.favorite
+                                : Icons.favorite_border,
+                            size: 20,
+                            color: entry.isFavorited
+                                ? Colors.red
+                                : Colors.white.withOpacity(0.7),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
+            if (entry.isExpanded) ...[
+              const SizedBox(height: 12),
+              if (entry.imagePath != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.file(
+                    File(entry.imagePath!),
+                    width: double.infinity,
+                    height: 180,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  gradient: const LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      Color(0xFF9F7BFF),
+                      Color(0xFF38BDF8),
+                    ],
+                  ),
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () {
+                      // Share button - no implementation
+                    },
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.share_rounded,
+                            size: 18,
+                            color: Colors.white,
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            'Share',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -1917,6 +2086,12 @@ class CaptionHistory extends ChangeNotifier {
     final index = _entries.indexWhere((e) => e.id == id);
     if (index == -1) return;
     _entries[index].isFavorited = !_entries[index].isFavorited;
+    notifyListeners();
+    _saveHistory();
+  }
+
+  void deleteEntry(String id) {
+    _entries.removeWhere((e) => e.id == id);
     notifyListeners();
     _saveHistory();
   }
