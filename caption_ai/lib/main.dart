@@ -652,8 +652,10 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
       );
       final headers = {'Content-Type': 'application/json'};
       final base64Image = base64Encode(imageBytes);
+      print("Prompt Mode: " + _selectedMood.toLowerCase());
       final body = jsonEncode({
         'imageBase64': base64Image,
+        'promptMode': _selectedMood.toLowerCase(),
       });
 
       final response =
