@@ -1,10 +1,12 @@
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:http/http.dart' as http;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -83,7 +85,10 @@ class _CaptionAiRootState extends State<CaptionAiRoot> {
     final isCameraPage = _currentIndex == 1;
 
     final pages = [
-      HomePage(onOpenCamera: () => _goTo(1)),
+      HomePage(
+        onOpenCamera: () => _goTo(1),
+        onOpenHistory: () => _goTo(2),
+      ),
       const CameraPage(fullscreen: true),
       const HistoryPage(),
     ];
@@ -93,7 +98,7 @@ class _CaptionAiRootState extends State<CaptionAiRoot> {
       appBar: isCameraPage
           ? null
           : const PreferredSize(
-              preferredSize: Size.fromHeight(70),
+              preferredSize: Size.fromHeight(80),
               child: CaptionAppBar(),
             ),
       body: Container(
@@ -112,11 +117,15 @@ class _CaptionAiRootState extends State<CaptionAiRoot> {
             final topInset = isCameraPage
                 ? 0.0
                 : kToolbarHeight + MediaQuery.of(context).padding.top;
-            return Padding(
-              padding: EdgeInsets.only(top: topInset),
-              child: IndexedStack(
-                index: _currentIndex,
-                children: pages,
+            return SafeArea(
+              top: false,
+              bottom: true,
+              child: Padding(
+                padding: EdgeInsets.only(top: topInset),
+                child: IndexedStack(
+                  index: _currentIndex,
+                  children: pages,
+                ),
               ),
             );
           },
@@ -177,7 +186,8 @@ class CaptionAppBar extends StatelessWidget {
         ),
       ),
       child: SafeArea(
-        bottom: true,
+        top: true,
+        bottom: false,
         child: Row(
           children: [
             Container(
@@ -232,12 +242,19 @@ class CaptionAppBar extends StatelessWidget {
 }
 
 class HomePage extends StatelessWidget {
-  const HomePage({required this.onOpenCamera, super.key});
+  const HomePage({
+    required this.onOpenCamera,
+    required this.onOpenHistory,
+    super.key,
+  });
 
   final VoidCallback onOpenCamera;
+  final VoidCallback onOpenHistory;
 
   @override
   Widget build(BuildContext context) {
+    final history = context.watch<CaptionHistory>().entries;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
       child: Column(
@@ -387,26 +404,78 @@ class HomePage extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 32),
-          ElevatedButton.icon(
-            onPressed: onOpenCamera,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF7C3AED),
-              foregroundColor: Colors.white,
-              minimumSize: const Size.fromHeight(54),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ElevatedButton.icon(
+                onPressed: onOpenCamera,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF7C3AED),
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(54),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                ),
+                icon: const Icon(Icons.camera_alt_rounded),
+                label: const Text('Open camera'),
               ),
-            ),
-            icon: const Icon(Icons.camera_alt_rounded),
-            label: const Text('Open camera'),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: onOpenHistory,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(50),
+                  side: BorderSide(
+                    color: Colors.white.withOpacity(0.25),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  backgroundColor: Colors.white.withOpacity(0.03),
+                ),
+                icon: const Icon(Icons.history_rounded),
+                label: const Text('View history'),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           Text(
-            'No images are uploaded anywhere – this is a local prototype.',
+            'Images are sent to a captioning service to generate descriptions.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Colors.white54,
                 ),
           ),
+          if (history.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Text(
+                  'Recent captions',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: onOpenHistory,
+                  child: const Text('View all'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Column(
+              children: history
+                  .take(3)
+                  .map(
+                    (entry) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _HistoryEntryTile(entry: entry),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
           const SizedBox(height: 16),
         ],
       ),
@@ -505,7 +574,7 @@ class _CameraPageState extends State<CameraPage> {
     });
     try {
       final image = await _cameraController!.takePicture();
-      _onImageSelected(image);
+      await _onImageSelected(image);
     } catch (_) {
       setState(() {
         _isBusy = false;
@@ -522,7 +591,7 @@ class _CameraPageState extends State<CameraPage> {
       final picker = ImagePicker();
       final image = await picker.pickImage(source: ImageSource.gallery);
       if (image != null) {
-        _onImageSelected(image);
+        await _onImageSelected(image);
       } else {
         setState(() {
           _isBusy = false;
@@ -535,35 +604,131 @@ class _CameraPageState extends State<CameraPage> {
     }
   }
 
-  void _onImageSelected(XFile image) {
-    final placeholderCaption =
-        'A stylish placeholder caption describing this scene in a friendly, human way.';
-
-    context.read<CaptionHistory>().addEntry(
-          caption: placeholderCaption,
-          imagePath: image.path,
-        );
-
+  Future<void> _onImageSelected(XFile image) async {
     setState(() {
       _lastImage = image;
-      _lastCaption = placeholderCaption;
-      _isBusy = false;
+      _lastCaption = null;
     });
+
+    try {
+      final imageBytes = await File(image.path).readAsBytes();
+
+      final url = Uri.parse(
+        'https://caption-ai-proxy.image-proxy-gateway.workers.dev/',
+      );
+      final headers = {'Content-Type': 'application/json'};
+      final base64Image = base64Encode(imageBytes);
+      final body = jsonEncode({
+        'imageBase64': base64Image,
+      });
+
+      final response =
+          await http.post(url, headers: headers, body: body).timeout(
+                const Duration(seconds: 30),
+              );
+
+      String caption;
+      if (response.statusCode == 200) {
+        caption = _extractCaptionFromGeminiResponse(response.body).trim();
+        if (caption.isEmpty) {
+          caption =
+              'The caption service returned an empty response for this image.';
+        }
+      } else {
+        caption =
+            'Unable to generate a caption (status code ${response.statusCode}).';
+      }
+
+      context.read<CaptionHistory>().addEntry(
+            caption: caption,
+            imagePath: image.path,
+          );
+
+      setState(() {
+        _lastCaption = caption;
+      });
+    } catch (_) {
+      const fallbackCaption =
+          'Something went wrong while generating a caption for this image.';
+
+      context.read<CaptionHistory>().addEntry(
+            caption: fallbackCaption,
+            imagePath: image.path,
+          );
+
+      setState(() {
+        _lastCaption = fallbackCaption;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
+    }
+  }
+
+  String _extractCaptionFromGeminiResponse(String body) {
+    try {
+      final decoded = jsonDecode(body);
+
+      if (decoded is Map<String, dynamic>) {
+        // Standard Gemini-style: candidates[0].content.parts[0].text
+        final candidates = decoded['candidates'];
+        if (candidates is List && candidates.isNotEmpty) {
+          final first = candidates.first;
+          if (first is Map<String, dynamic>) {
+            final content = first['content'];
+            if (content is Map<String, dynamic>) {
+              final parts = content['parts'];
+              if (parts is List && parts.isNotEmpty) {
+                final firstPart = parts.first;
+                if (firstPart is Map<String, dynamic>) {
+                  final text = firstPart['text'];
+                  if (text is String && text.trim().isNotEmpty) {
+                    return text;
+                  }
+                }
+              }
+            }
+
+            // Some variations may expose text directly on the candidate
+            final candidateText = first['text'];
+            if (candidateText is String && candidateText.trim().isNotEmpty) {
+              return candidateText;
+            }
+          }
+        }
+
+        // Some APIs wrap text at the top level
+        final topLevelText = decoded['text'];
+        if (topLevelText is String && topLevelText.trim().isNotEmpty) {
+          return topLevelText;
+        }
+      }
+    } catch (_) {
+      // Fall back to raw body if JSON parsing or shape inspection fails.
+    }
+
+    return body;
   }
 
   @override
   Widget build(BuildContext context) {
     if (widget.fullscreen) {
-      return Column(
-        children: [
-          Expanded(
-            child: ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(32)),
-              child: _buildCameraPreview(context),
+      return Padding(
+        padding: const EdgeInsets.only(top: 24),
+        child: Column(
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(32)),
+                child: _buildCameraPreview(context),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       );
     }
 
@@ -664,8 +829,15 @@ class _CameraPageState extends State<CameraPage> {
             Positioned.fill(
               child: CameraPreview(_cameraController!),
             ),
+            if (_lastImage != null)
+              Positioned.fill(
+                child: Image.file(
+                  File(_lastImage!.path),
+                  fit: BoxFit.cover,
+                ),
+              ),
             Positioned(
-              top: 14,
+              top: 28,
               right: 14,
               child: Material(
                 color: Colors.black.withOpacity(0.3),
@@ -683,42 +855,37 @@ class _CameraPageState extends State<CameraPage> {
                 ),
               ),
             ),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 20),
-                child: GestureDetector(
-                  onTap: _isBusy ? null : _captureWithCamera,
-                  child: Container(
-                    width: 78,
-                    height: 78,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: _isBusy
-                            ? Colors.white30
-                            : Colors.white.withOpacity(0.9),
-                        width: 4,
+            if (!_isBusy && _lastCaption == null)
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: GestureDetector(
+                    onTap: _captureWithCamera,
+                    child: Container(
+                      width: 78,
+                      height: 78,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.9),
+                          width: 4,
+                        ),
                       ),
-                    ),
-                    child: Center(
-                      child: Container(
-                        width: 60,
-                        height: 60,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: _isBusy
-                                ? [
-                                    Colors.white24,
-                                    Colors.white12,
-                                  ]
-                                : const [
-                                    Color(0xFF7C3AED),
-                                    Color(0xFF22D3EE),
-                                  ],
+                      child: Center(
+                        child: Container(
+                          width: 60,
+                          height: 60,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Color(0xFF7C3AED),
+                                Color(0xFF22D3EE),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -726,7 +893,83 @@ class _CameraPageState extends State<CameraPage> {
                   ),
                 ),
               ),
-            ),
+            if (_lastCaption != null)
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.only(left: 16, right: 16, bottom: 20),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(18),
+                      color: Colors.black.withOpacity(0.75),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.16),
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(999),
+                                gradient: const LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    Color(0xFF7C3AED),
+                                    Color(0xFF22D3EE),
+                                  ],
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.auto_awesome_rounded,
+                                size: 18,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const Spacer(),
+                            InkWell(
+                              borderRadius: BorderRadius.circular(999),
+                              onTap: () {
+                                setState(() {
+                                  _lastCaption = null;
+                                  _lastImage = null;
+                                });
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.all(4),
+                                child: Icon(
+                                  Icons.close_rounded,
+                                  size: 20,
+                                  color: Colors.white.withOpacity(0.9),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _lastCaption ?? '',
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Colors.white,
+                                  ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
           ],
         );
       },
