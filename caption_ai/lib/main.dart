@@ -550,6 +550,7 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
   String? _lastCaption;
   String? _lastImagePath;
   bool _isBusy = false;
+  int _fireAnimationTrigger = 0;
 
   @override
   void initState() {
@@ -652,10 +653,8 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
       );
       final headers = {'Content-Type': 'application/json'};
       final base64Image = base64Encode(imageBytes);
-      print("Prompt Mode: " + _selectedMood.toLowerCase());
       final body = jsonEncode({
         'imageBase64': base64Image,
-        'promptMode': _selectedMood.toLowerCase(),
       });
 
       final response =
@@ -710,6 +709,159 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
       _lastImagePath = null;
       _lastCaption = null;
     });
+  }
+
+  void _showChaosModeDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.7),
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(28),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFFFF4500).withOpacity(0.95),
+                  const Color(0xFFFF6B00).withOpacity(0.9),
+                  const Color(0xFF0B1120).withOpacity(0.98),
+                ],
+                stops: const [0.0, 0.5, 1.0],
+              ),
+              border: Border.all(
+                color: const Color(0xFFFF4500).withOpacity(0.6),
+                width: 2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFF4500).withOpacity(0.5),
+                  blurRadius: 24,
+                  spreadRadius: 4,
+                ),
+              ],
+            ),
+            constraints: const BoxConstraints(
+              minWidth: 280,
+              maxWidth: 400,
+            ),
+            child: Stack(
+              children: [
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '🔥',
+                            style: TextStyle(fontSize: 32),
+                          ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              'Chaos Mode - Enabled',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.poppins(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.black.withOpacity(0.5),
+                                    blurRadius: 4,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '🔥',
+                            style: TextStyle(fontSize: 32),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Text(
+                        'You have enabled chaos mode! Prepare for chaos!',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white.withOpacity(0.95),
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        gradient: const LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            Color(0xFFFF4500),
+                            Color(0xFFFF6B00),
+                          ],
+                        ),
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () => Navigator.of(context).pop(),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 32,
+                              vertical: 12,
+                            ),
+                            child: Text(
+                              'Let\'s Go! 🔥',
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                  ],
+                ),
+                Positioned(
+                  bottom: 12,
+                  right: 12,
+                  left: 12,
+                  child: Text(
+                    '*Not suitable for younger audiences*',
+                    textAlign: TextAlign.right,
+                    style: GoogleFonts.poppins(
+                      fontSize: 9,
+                      color: Colors.white.withOpacity(0.25),
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   String _extractCaptionFromGeminiResponse(String body) {
@@ -868,8 +1020,9 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
       'Funny': Colors.amber,
       'Sarcastic': Colors.purple,
       'Savage': const Color(0xFFDC143C), // Crimson
-      'Chaotic': const Color(0xFFFF69B4), // Hot Pink
+      'Unhinged': const Color(0xFFFF69B4), // Hot Pink
       'Wholesome': const Color(0xFFFFF9C4), // Soft Yellow
+      'Chaos Mode 🔥': const Color(0xFFFF4500), // Orange Red
     };
 
     // If we have a captured image, show it instead of the camera preview
@@ -1103,11 +1256,39 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
       );
     }
 
+    final isChaosMode = _selectedMood.contains('Chaos Mode');
+    
     return Stack(
       children: [
         Positioned.fill(
           child: backgroundWidget!,
         ),
+        // Fire overlay effect when Chaos Mode is active
+        if (isChaosMode)
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    const Color(0xFFFF4500).withOpacity(0.05),
+                    Colors.transparent,
+                    const Color(0xFFFF4500).withOpacity(0.08),
+                  ],
+                  stops: const [0.0, 0.5, 1.0],
+                ),
+              ),
+            ),
+          ),
+        // Animated fire indicator when Chaos Mode is active
+        if (isChaosMode)
+          Positioned.fill(
+            key: const ValueKey('chaos_fire_indicator'),
+            child: _ChaosModeFireIndicator(
+              trigger: _fireAnimationTrigger,
+            ),
+          ),
             Positioned(
               top: 24,
               left: 14,
@@ -1116,9 +1297,25 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
                 options: moodOptions,
                 onChanged: (value) {
                   if (value == null) return;
+                  final wasChaosMode = _selectedMood.contains('Chaos Mode');
+                  final isChaosMode = value.contains('Chaos Mode');
+                  
                   setState(() {
                     _selectedMood = value;
                   });
+                  
+                  // Trigger fire animation and show dialog when switching TO Chaos Mode
+                  // Use post-frame callback to ensure widget is built first
+                  if (!wasChaosMode && isChaosMode) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) {
+                        setState(() {
+                          _fireAnimationTrigger++;
+                        });
+                        _showChaosModeDialog(context);
+                      }
+                    });
+                  }
                 },
               ),
             ),
@@ -1182,24 +1379,45 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.9),
+                          color: isChaosMode
+                              ? const Color(0xFFFF4500).withOpacity(0.9)
+                              : Colors.white.withOpacity(0.9),
                           width: 4,
                         ),
+                        boxShadow: isChaosMode
+                            ? [
+                                BoxShadow(
+                                  color: const Color(0xFFFF4500).withOpacity(0.5),
+                                  blurRadius: 16,
+                                  spreadRadius: 2,
+                                ),
+                              ]
+                            : null,
                       ),
                       child: Center(
                         child: Container(
                           width: 60,
                           height: 60,
-                          decoration: const BoxDecoration(
+                          decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                Color(0xFF7C3AED),
-                                Color(0xFF22D3EE),
-                              ],
-                            ),
+                            gradient: isChaosMode
+                                ? const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Color(0xFFFF4500),
+                                      Color(0xFFFF6B00),
+                                      Color(0xFFFF8C00),
+                                    ],
+                                  )
+                                : const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Color(0xFF7C3AED),
+                                      Color(0xFF22D3EE),
+                                    ],
+                                  ),
                           ),
                         ),
                       ),
@@ -1218,20 +1436,35 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
                         const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(22),
-                      gradient: const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Color(0xFF0B1120),
-                          Color(0xFF020617),
-                        ],
-                      ),
+                      gradient: isChaosMode
+                          ? LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                const Color(0xFFFF4500).withOpacity(0.15),
+                                const Color(0xFFFF6B00).withOpacity(0.1),
+                                const Color(0xFF0B1120),
+                              ],
+                            )
+                          : const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Color(0xFF0B1120),
+                                Color(0xFF020617),
+                              ],
+                            ),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.18),
+                        color: isChaosMode
+                            ? const Color(0xFFFF4500).withOpacity(0.4)
+                            : Colors.white.withOpacity(0.18),
+                        width: isChaosMode ? 1.5 : 1,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.45),
+                          color: isChaosMode
+                              ? const Color(0xFFFF4500).withOpacity(0.3)
+                              : Colors.black.withOpacity(0.45),
                           blurRadius: 24,
                           offset: const Offset(0, 14),
                         ),
@@ -1249,17 +1482,26 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
                               height: 30,
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(8),
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    Color(0xFF38BDF8),
-                                    Color(0xFF9F7BFF),
-                                  ],
-                                ),
+                                gradient: isChaosMode
+                                    ? const LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          Color(0xFFFF4500),
+                                          Color(0xFFFF6B00),
+                                        ],
+                                      )
+                                    : const LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          Color(0xFF38BDF8),
+                                          Color(0xFF9F7BFF),
+                                        ],
+                                      ),
                               ),
-                              child: const Icon(
-                                Icons.camera_alt_rounded,
+                              child: Icon(
+                                isChaosMode ? Icons.local_fire_department_rounded : Icons.camera_alt_rounded,
                                 size: 18,
                                 color: Colors.white,
                               ),
@@ -1319,14 +1561,24 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
                           width: double.infinity,
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(12),
-                            gradient: const LinearGradient(
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
-                              colors: [
-                                Color(0xFF9F7BFF),
-                                Color(0xFF38BDF8),
-                              ],
-                            ),
+                            gradient: isChaosMode
+                                ? const LinearGradient(
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
+                                    colors: [
+                                      Color(0xFFFF4500),
+                                      Color(0xFFFF6B00),
+                                      Color(0xFFFF8C00),
+                                    ],
+                                  )
+                                : const LinearGradient(
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
+                                    colors: [
+                                      Color(0xFF9F7BFF),
+                                      Color(0xFF38BDF8),
+                                    ],
+                                  ),
                           ),
                           child: Material(
                             color: Colors.transparent,
@@ -1343,14 +1595,16 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    const Icon(
-                                      Icons.share_rounded,
+                                    Icon(
+                                      isChaosMode
+                                          ? Icons.local_fire_department_rounded
+                                          : Icons.share_rounded,
                                       size: 18,
                                       color: Colors.white,
                                     ),
                                     const SizedBox(width: 6),
                                     Text(
-                                      'Share',
+                                      isChaosMode ? 'Share 🔥' : 'Share',
                                       style: GoogleFonts.poppins(
                                         color: Colors.white,
                                         fontWeight: FontWeight.w600,
@@ -1386,15 +1640,31 @@ class _MoodDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isChaosMode = value.contains('Chaos Mode');
+    
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       height: 38,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
-        color: Colors.black.withOpacity(0.45),
+        color: isChaosMode
+            ? const Color(0xFFFF4500).withOpacity(0.2)
+            : Colors.black.withOpacity(0.45),
         border: Border.all(
-          color: Colors.white.withOpacity(0.16),
+          color: isChaosMode
+              ? const Color(0xFFFF4500).withOpacity(0.6)
+              : Colors.white.withOpacity(0.16),
+          width: isChaosMode ? 1.5 : 1,
         ),
+        boxShadow: isChaosMode
+            ? [
+                BoxShadow(
+                  color: const Color(0xFFFF4500).withOpacity(0.4),
+                  blurRadius: 8,
+                  spreadRadius: 0,
+                ),
+              ]
+            : null,
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
@@ -1403,35 +1673,199 @@ class _MoodDropdown extends StatelessWidget {
           dropdownColor: const Color(0xFF0B1020),
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Colors.white,
+                fontWeight: isChaosMode ? FontWeight.w600 : FontWeight.normal,
               ),
-          icon: const Icon(
+          icon: Icon(
             Icons.keyboard_arrow_down_rounded,
             size: 18,
-            color: Colors.white70,
+            color: isChaosMode
+                ? const Color(0xFFFF4500)
+                : Colors.white70,
           ),
           items: options.entries
               .map(
-                (entry) => DropdownMenuItem<String>(
-                  value: entry.key,
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: entry.value,
-                          shape: BoxShape.circle,
+                (entry) {
+                  final isChaosItem = entry.key.contains('Chaos Mode');
+                  return DropdownMenuItem<String>(
+                    value: entry.key,
+                    child: Row(
+                      children: [
+                        if (isChaosItem)
+                          const Text('🔥', style: TextStyle(fontSize: 16))
+                        else
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: entry.value,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        const SizedBox(width: 8),
+                        Text(
+                          entry.key,
+                          style: TextStyle(
+                            fontWeight: isChaosItem
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(entry.key),
-                    ],
-                  ),
-                ),
+                      ],
+                    ),
+                  );
+                },
               )
               .toList(),
           onChanged: onChanged,
         ),
+      ),
+    );
+  }
+}
+
+class _ChaosModeFireIndicator extends StatefulWidget {
+  const _ChaosModeFireIndicator({required this.trigger});
+
+  final int trigger;
+
+  @override
+  State<_ChaosModeFireIndicator> createState() => _ChaosModeFireIndicatorState();
+}
+
+class _ChaosModeFireIndicatorState extends State<_ChaosModeFireIndicator>
+    with TickerProviderStateMixin {
+  late List<AnimationController> _controllers;
+  late List<Animation<double>> _verticalAnimations;
+  late List<Animation<double>> _horizontalAnimations;
+  late List<Animation<double>> _opacityAnimations;
+  final int _fireCount = 8;
+  int _lastTrigger = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    _controllers = List.generate(
+      _fireCount,
+      (index) => AnimationController(
+        duration: Duration(milliseconds: 2000 + (index * 300)),
+        vsync: this,
+      ),
+    );
+
+    _verticalAnimations = _controllers.map((controller) {
+      return Tween<double>(begin: 1.0, end: -0.2).animate(
+        CurvedAnimation(
+          parent: controller,
+          curve: Curves.easeOut,
+        ),
+      );
+    }).toList();
+
+    _horizontalAnimations = _controllers.map((controller) {
+      return Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(
+          parent: controller,
+          curve: Curves.easeInOut,
+        ),
+      );
+    }).toList();
+
+    _opacityAnimations = _controllers.map((controller) {
+      return TweenSequence<double>([
+        TweenSequenceItem(
+          tween: Tween<double>(begin: 0.0, end: 1.0)
+              .chain(CurveTween(curve: Curves.easeIn)),
+          weight: 0.2,
+        ),
+        TweenSequenceItem(
+          tween: Tween<double>(begin: 1.0, end: 1.0),
+          weight: 0.5,
+        ),
+        TweenSequenceItem(
+          tween: Tween<double>(begin: 1.0, end: 0.0)
+              .chain(CurveTween(curve: Curves.easeOut)),
+          weight: 0.3,
+        ),
+      ]).animate(controller);
+    }).toList();
+    
+    // Start animation if trigger is already set (when widget is first created with trigger > 0)
+    _lastTrigger = widget.trigger;
+    if (widget.trigger > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          for (var controller in _controllers) {
+            controller.forward();
+          }
+        }
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(_ChaosModeFireIndicator oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Trigger animation when trigger value increases (not just changes)
+    if (widget.trigger > _lastTrigger) {
+      _lastTrigger = widget.trigger;
+      // Reset and start all animations once
+      for (var controller in _controllers) {
+        controller.reset();
+        controller.forward();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    for (var controller in _controllers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Stack(
+        children: List.generate(_fireCount, (index) {
+          final random = (index * 0.618033988749) % 1.0; // Golden ratio for distribution
+          final startX = random;
+          
+          return AnimatedBuilder(
+            animation: _controllers[index],
+            builder: (context, child) {
+              final screenSize = MediaQuery.of(context).size;
+              final verticalPos = _verticalAnimations[index].value;
+              final horizontalPos = startX + 
+                  (_horizontalAnimations[index].value - 0.5) * 0.3;
+              final opacity = _opacityAnimations[index].value;
+              
+              return Positioned(
+                left: screenSize.width * horizontalPos,
+                top: screenSize.height * verticalPos,
+                child: Opacity(
+                  opacity: opacity,
+                  child: Transform.scale(
+                    scale: 0.8 + (opacity * 0.4),
+                    child: Text(
+                      '🔥',
+                      style: TextStyle(
+                        fontSize: 24 + (opacity * 8),
+                        shadows: [
+                          Shadow(
+                            color: const Color(0xFFFF4500).withOpacity(opacity * 0.8),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        }),
       ),
     );
   }
