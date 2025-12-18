@@ -100,6 +100,19 @@ class _CaptionAiRootState extends State<CaptionAiRoot> {
       HomePage(
         onOpenCamera: () => _goTo(1),
         onOpenHistory: () => _goTo(2),
+        onPickFromGallery: () {
+          setState(() {
+            _currentIndex = 1;
+          });
+          // Delay ensures CameraPage is shown first (so context is available)
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            // Find the CameraPage and trigger a gallery pick event on mount
+            final nav = Navigator.of(context);
+            nav.push(MaterialPageRoute(
+              builder: (ctx) => CameraPage(fullscreen: true, initialGallery: true),
+            ));
+          });
+        },
       ),
       const CameraPage(fullscreen: true),
       HistoryPage(
@@ -190,67 +203,39 @@ class CaptionAppBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 0, horizontal: 20), // FLUSH, no deadspace
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color(0xCC020617),
-            Color(0x00020617),
-          ],
-        ),
-      ),
+      color: Colors.transparent,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
       child: SafeArea(
         top: true,
         bottom: false,
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF7C3AED),
-                    Color(0xFF4ADE80),
-                  ],
+        child: SizedBox(
+          height: 50,
+          child: Row(
+            children: [
+              // Minimal logo: circle with initial
+              Container(
+                width: 32,
+                height: 32,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.09),
+                  borderRadius: BorderRadius.circular(12),
                 ),
+                child: Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 20),
               ),
-              alignment: Alignment.center,
-              child: Text(
-                'C',
+              const SizedBox(width: 10),
+              Text(
+                'Caption.ai',
                 style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w700,
                   fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white.withOpacity(0.92),
+                  letterSpacing: 0.3,
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'Caption.ai',
-                  style: GoogleFonts.poppins(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  'Turn images into words.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.white70,
-                      ),
-                ),
-              ],
-            ),
-            const Spacer(),
-          ],
+              const Spacer(),
+            ],
+          ),
         ),
       ),
     );
@@ -261,238 +246,184 @@ class HomePage extends StatelessWidget {
   const HomePage({
     required this.onOpenCamera,
     required this.onOpenHistory,
+    required this.onPickFromGallery,
     super.key,
   });
 
   final VoidCallback onOpenCamera;
   final VoidCallback onOpenHistory;
+  final VoidCallback onPickFromGallery;
 
   @override
   Widget build(BuildContext context) {
     final history = context.watch<CaptionHistory>().entries;
+    final recent = history.take(2).toList();
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Center(
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: Text(
-                  'Instant captions\nfor every moment.',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+              // Minimalist flat logo
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: Colors.white12,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.auto_awesome_rounded,
+                  color: Colors.white,
+                  size: 46,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Capture a photo or pick from your gallery and let Caption.ai craft a smart, shareable description in seconds.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.white70,
-                  height: 1.4,
+              const SizedBox(height: 20),
+              Text(
+                'Caption.ai',
+                style: GoogleFonts.poppins(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white.withOpacity(0.93),
+                  letterSpacing: 0.2,
                 ),
-          ),
-          const SizedBox(height: 28),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  height: 180,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(28),
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Color(0xFF7C3AED),
-                        Color(0xFF22D3EE),
-                      ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Instant image captions',
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: Colors.white70,
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF7C3AED).withOpacity(0.35),
-                        blurRadius: 32,
-                        offset: const Offset(0, 18),
-                      ),
-                    ],
-                  ),
-                  child: Stack(
-                    children: [
-                      Positioned(
-                        top: 18,
-                        left: 18,
-                        right: 18,
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(999),
-                                color: Colors.black.withOpacity(0.2),
-                              ),
-                              child: Text(
-                                'AI captioning',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelSmall
-                                    ?.copyWith(
-                                      color: Colors.white,
-                                      letterSpacing: 0.4,
-                                    ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Align(
-                        alignment: Alignment.center,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 18),
-                              child: const Icon(
-                                Icons.auto_awesome_rounded,
-                                color: Colors.white,
-                                size: 42,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Point. Capture. Caption.',
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Designed for speed and clarity,\nperfect for sharing.',
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    color: Colors.white.withOpacity(0.9),
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                textAlign: TextAlign.center,
               ),
-            ],
-          ),
-          const SizedBox(height: 28),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: const [
-              _FeatureChip(
-                icon: Icons.bolt_rounded,
-                label: 'Fast captions',
-              ),
-              _FeatureChip(
-                icon: Icons.image_outlined,
-                label: 'Camera & gallery',
-              ),
-              _FeatureChip(
-                icon: Icons.history_rounded,
-                label: 'Caption history',
-              ),
-              _FeatureChip(
-                icon: Icons.hub_outlined,
-                label: 'Clean, modern UI',
-              ),
-            ],
-          ),
-          const SizedBox(height: 32),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+              const SizedBox(height: 32),
               ElevatedButton.icon(
                 onPressed: onOpenCamera,
+                icon: const Icon(Icons.camera_alt_rounded),
+                label: const Text('Open camera'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF7C3AED),
                   foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(54),
+                  minimumSize: const Size.fromHeight(52),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(14),
                   ),
+                  textStyle: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+                  elevation: 0,
                 ),
-                icon: const Icon(Icons.camera_alt_rounded),
-                label: const Text('Open camera'),
               ),
               const SizedBox(height: 10),
               OutlinedButton.icon(
-                onPressed: onOpenHistory,
+                onPressed: onPickFromGallery,
+                icon: const Icon(Icons.photo_library_rounded),
+                label: const Text('Pick from gallery'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(54),
-                  side: BorderSide(
-                    color: Colors.white.withOpacity(0.25),
-                  ),
+                  minimumSize: const Size.fromHeight(52),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  backgroundColor: Colors.white.withOpacity(0.03),
+                  side: BorderSide(color: Colors.white.withOpacity(0.17)),
+                  backgroundColor: Colors.white.withOpacity(0.01),
+                  textStyle: GoogleFonts.poppins(fontWeight: FontWeight.w500),
                 ),
-                icon: const Icon(Icons.history_rounded),
-                label: const Text('View history'),
+              ),
+              if (recent.isNotEmpty) ...[
+                const SizedBox(height: 28),
+                Row(
+                  children: [
+                    Text(
+                      'Recent captions',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: onOpenHistory,
+                      child: const Text('See all'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white70,
+                        textStyle: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size(32, 32),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                ...recent.map((entry) => _MiniHistoryTile(entry: entry)),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniHistoryTile extends StatelessWidget {
+  const _MiniHistoryTile({required this.entry});
+  final CaptionEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final created = entry.createdAt;
+    final timeLabel = '${created.hour.toString().padLeft(2, '0')}:${created.minute.toString().padLeft(2, '0')}';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: Colors.white.withOpacity(0.03),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: Row(
+        children: [
+          if (entry.imagePath != null)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.file(
+                File(entry.imagePath!),
+                width: 36,
+                height: 36,
+                fit: BoxFit.cover,
+              ),
+            )
+          else
+            Container(
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                color: Colors.white.withOpacity(0.08),
+              ),
+              child: const Icon(Icons.text_snippet_outlined, color: Colors.white54, size: 20),
+            ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              entry.caption,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.access_time_rounded, size: 14, color: Colors.white38),
+              Text(
+                timeLabel,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white54),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            'Images are sent to a captioning service to generate descriptions.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.white54,
-                ),
-          ),
-          if (history.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Text(
-                  'Recent captions',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: onOpenHistory,
-                  child: const Text('View all'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Column(
-              children: history
-                  .take(3)
-                  .map(
-                    (entry) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: _HistoryEntryTile(entry: entry),
-                    ),
-                  )
-                  .toList(),
-            ),
-          ],
-          const SizedBox(height: 16),
         ],
       ),
     );
@@ -532,9 +463,10 @@ class _FeatureChip extends StatelessWidget {
 }
 
 class CameraPage extends StatefulWidget {
-  const CameraPage({this.fullscreen = false, super.key});
+  const CameraPage({this.fullscreen = false, this.initialGallery = false, super.key});
 
   final bool fullscreen;
+  final bool initialGallery;
 
   @override
   State<CameraPage> createState() => _CameraPageState();
@@ -557,6 +489,12 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initializeCamera();
+    // If initialGallery is true, immediately pick from gallery
+    if (widget.initialGallery == true) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _pickFromGallery();
+      });
+    }
   }
 
   @override
@@ -855,8 +793,8 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
                   ],
                 ),
                 Positioned(
-                  bottom: 12,
-                  right: 12,
+                  bottom: 20,
+                  right: 20,
                   left: 12,
                   child: Align(
                     alignment: Alignment.centerRight,
@@ -1466,9 +1404,9 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                               colors: [
-                                const Color(0xFFFF4500).withOpacity(0.15),
-                                const Color(0xFFFF6B00).withOpacity(0.1),
-                                const Color(0xFF0B1120),
+                                const Color(0xFFFF4500).withOpacity(0.75),
+                                const Color(0xFFFF6B00).withOpacity(0.7),
+                                const Color(0xFF0B1120).withOpacity(0.85),
                               ],
                             )
                           : const LinearGradient(
