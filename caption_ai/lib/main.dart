@@ -653,8 +653,20 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
       );
       final headers = {'Content-Type': 'application/json'};
       final base64Image = base64Encode(imageBytes);
+      // Map display mood name to backend keyword
+      final moodBackendMap = {
+        'Funny': 'funny',
+        'Sarcastic': 'sarcastic',
+        'Savage': 'savage',
+        'Unhinged': 'unhinged',
+        'Wholesome': 'wholesome',
+        'Chaos Mode 🔥': 'chaos mode',
+      };
+      final backendMood = moodBackendMap[_selectedMood] ?? _selectedMood.toLowerCase();
+      print("Prompt Mode: " + backendMood);
       final body = jsonEncode({
         'imageBase64': base64Image,
+        'promptMode': backendMood
       });
 
       final response =
@@ -846,13 +858,26 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
                   bottom: 12,
                   right: 12,
                   left: 12,
-                  child: Text(
-                    '*Not suitable for younger audiences*',
-                    textAlign: TextAlign.right,
-                    style: GoogleFonts.poppins(
-                      fontSize: 9,
-                      color: Colors.white.withOpacity(0.25),
-                      fontStyle: FontStyle.italic,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        '*Not suitable for younger audiences*',
+                        textAlign: TextAlign.right,
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          color: Colors.white.withOpacity(0.9),
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
                     ),
                   ),
                 ),
