@@ -234,6 +234,33 @@ class CaptionAppBar extends StatelessWidget {
                 ),
               ),
               const Spacer(),
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const OptionsScreen(),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.settings_outlined,
+                      color: Colors.white.withOpacity(0.9),
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -360,6 +387,328 @@ class HomePage extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class OptionsScreen extends StatelessWidget {
+  const OptionsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          'Options',
+          style: GoogleFonts.poppins(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: Colors.white.withOpacity(0.92),
+          ),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.of(context).pop(),
+          color: Colors.white,
+        ),
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF0F172A),
+              Color(0xFF020617),
+            ],
+          ),
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Tutorial Section
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  color: Colors.white.withOpacity(0.03),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.08),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Color(0xFF9F7BFF),
+                                Color(0xFF38BDF8),
+                              ],
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.school_rounded,
+                            color: Colors.white,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Tutorial',
+                          style: GoogleFonts.poppins(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    _TutorialStep(
+                      stepNumber: 1,
+                      title: 'Take or Select an Image',
+                      description:
+                          'Tap the "Open camera" button to take a photo, or use "Pick from gallery" to select an existing image from your device.',
+                      icon: Icons.camera_alt_rounded,
+                    ),
+                    const SizedBox(height: 20),
+                    _TutorialStep(
+                      stepNumber: 2,
+                      title: 'Choose a Mood',
+                      description:
+                          'Select from different caption styles: Funny, Sarcastic, Savage, Unhinged, Wholesome, or Chaos Mode 🔥. Each mood generates captions with a unique personality.',
+                      icon: Icons.emoji_emotions_rounded,
+                    ),
+                    const SizedBox(height: 20),
+                    _TutorialStep(
+                      stepNumber: 3,
+                      title: 'Generate Caption',
+                      description:
+                          'After selecting your image, the app will automatically generate a caption. Wait a moment while AI processes your image.',
+                      icon: Icons.auto_awesome_rounded,
+                    ),
+                    const SizedBox(height: 20),
+                    _TutorialStep(
+                      stepNumber: 4,
+                      title: 'View History',
+                      description:
+                          'All your captions are saved automatically. Visit the History tab to see past captions, favorite them, or delete ones you no longer need.',
+                      icon: Icons.history_rounded,
+                    ),
+                    const SizedBox(height: 20),
+                    _TutorialStep(
+                      stepNumber: 5,
+                      title: 'Share Your Captions',
+                      description:
+                          'Tap the "Share" button on any generated caption to share it with friends or save it for later.',
+                      icon: Icons.share_rounded,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              // Tips Section
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  color: Colors.white.withOpacity(0.03),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.08),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Color(0xFFFF6B6B),
+                                Color(0xFFFF8E53),
+                              ],
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.lightbulb_rounded,
+                            color: Colors.white,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Tips & Tricks',
+                          style: GoogleFonts.poppins(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    _TipItem(
+                      icon: Icons.star_rounded,
+                      text: 'Try different moods for the same image to see how the caption style changes',
+                    ),
+                    const SizedBox(height: 16),
+                    _TipItem(
+                      icon: Icons.favorite_rounded,
+                      text: 'Favorite your best captions to easily find them later in the History tab',
+                    ),
+                    const SizedBox(height: 16),
+                    _TipItem(
+                      icon: Icons.auto_awesome_rounded,
+                      text: 'Chaos Mode generates the most unpredictable and wild captions - use with caution!',
+                    ),
+                    const SizedBox(height: 16),
+                    _TipItem(
+                      icon: Icons.image_rounded,
+                      text: 'The app works best with clear, well-lit images',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TutorialStep extends StatelessWidget {
+  const _TutorialStep({
+    required this.stepNumber,
+    required this.title,
+    required this.description,
+    required this.icon,
+  });
+
+  final int stepNumber;
+  final String title;
+  final String description;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF7C3AED),
+                Color(0xFF22D3EE),
+              ],
+            ),
+          ),
+          child: Center(
+            child: Text(
+              '$stepNumber',
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    icon,
+                    size: 18,
+                    color: Colors.white.withOpacity(0.8),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    title,
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                description,
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  color: Colors.white.withOpacity(0.7),
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TipItem extends StatelessWidget {
+  const _TipItem({
+    required this.icon,
+    required this.text,
+  });
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          icon,
+          size: 20,
+          color: const Color(0xFFFF8E53).withOpacity(0.9),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            text,
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              color: Colors.white.withOpacity(0.8),
+              height: 1.5,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
